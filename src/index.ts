@@ -7,6 +7,7 @@ import { buy, sell } from "./executor.js";
 import { canEnter, killSwitchOn, recordPnl, recordSpend } from "./risk.js";
 import { checkSafety, liquidityCollapsed, addRug, screenCreator } from "./safety.js";
 import { notify, notifierEnabled, proofLink } from "./notify.js";
+import { gmgnScreen } from "./gmgn.js";
 import { currentPrice } from "./market.js";
 import { archiveForeignModePositions, positions, saveJson, type Position } from "./state.js";
 import { journalTrade, toClosedTrade, type ClosedTrade } from "./journal.js";
@@ -155,6 +156,13 @@ async function tryEnter(c: Candidate) {
     return;
   }
 
+  // GMGN security screen (advisory: flags reject, missing data passes).
+  const gmgn = await gmgnScreen(c.info.token);
+  if (!gmgn.ok) {
+    log("safety", `rejected ${c.info.symbol} (${c.kind}): ${gmgn.reason}`);
+    return;
+  }
+
   try {
     const fill = await buy(c.info, sizeEth);
     const pos: Position = {
@@ -175,7 +183,7 @@ async function tryEnter(c: Candidate) {
       launchpad: c.launchpad,
       entryTxHash: fill.txHash,
       openedAt: Date.now(),
-      entrySignal: { ...c.features, ...creatorScreen.features, roundTripLossPct: safety.roundTripLossPct ?? 0, poolWethEth: safety.poolWethEth ?? 0 },
+      entrySignal: { ...c.features, ...creatorScreen.features, ...gmgn.features, roundTripLossPct: safety.roundTripLossPct ?? 0, poolWethEth: safety.poolWethEth ?? 0 },
       paramsAtEntry: { ...p },
     };
     const all = positions.load();
