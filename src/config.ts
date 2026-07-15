@@ -9,6 +9,12 @@ import path from "node:path";
 // ---------------------------------------------------------------------------
 export const CHAIN_ID = 4663;
 export const RPC_URL = process.env.RPC_URL ?? "https://rpc.mainnet.chain.robinhood.com";
+/**
+ * Wide-range eth_getLogs go to the public RPC: Alchemy's free tier caps
+ * getLogs at 10 blocks, but everything latency-critical (quotes, prices,
+ * balances, tx submission) stays on RPC_URL.
+ */
+export const LOGS_RPC_URL = process.env.LOGS_RPC_URL ?? "https://rpc.mainnet.chain.robinhood.com";
 export const EXPLORER = "https://robinhoodchain.blockscout.com";
 
 export const ADDR = {

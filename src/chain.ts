@@ -1,6 +1,6 @@
 import { createPublicClient, createWalletClient, defineChain, http, type WalletClient, type Account, type Chain, type Transport } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import { CHAIN_ID, RPC_URL, EXPLORER, LIVE, PRIVATE_KEY } from "./config.js";
+import { CHAIN_ID, RPC_URL, LOGS_RPC_URL, EXPLORER, LIVE, PRIVATE_KEY } from "./config.js";
 
 export const robinhoodChain = defineChain({
   id: CHAIN_ID,
@@ -18,6 +18,12 @@ export const pub = createPublicClient({
   chain: robinhoodChain,
   transport: http(RPC_URL, { retryCount: 3, timeout: 15_000 }),
   batch: { multicall: { wait: 30 } },
+});
+
+/** Log-sweep client — public RPC allows unbounded getLogs block ranges. */
+export const logsPub = createPublicClient({
+  chain: robinhoodChain,
+  transport: http(LOGS_RPC_URL, { retryCount: 2, timeout: 30_000 }),
 });
 
 export const account: Account | undefined = LIVE && PRIVATE_KEY ? privateKeyToAccount(PRIVATE_KEY) : undefined;

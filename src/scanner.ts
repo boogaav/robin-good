@@ -1,5 +1,5 @@
 import { formatEther, parseAbiItem } from "viem";
-import { pub } from "./chain.js";
+import { pub, logsPub } from "./chain.js";
 import { ADDR, LOG_CHUNK_BLOCKS } from "./config.js";
 import { factoryAbi } from "./abi.js";
 import { resolvePool, priceFromSqrt, markCreated, type PoolInfo } from "./market.js";
@@ -66,7 +66,7 @@ export class Scanner {
     if (head <= this.discBlock) return;
     let from = this.discBlock + 1n;
     if (head - from > LOG_CHUNK_BLOCKS) from = head - LOG_CHUNK_BLOCKS + 1n;
-    const created = await pub.getLogs({ address: ADDR.UNIV3_FACTORY, event: factoryAbi[0], fromBlock: from, toBlock: head });
+    const created = await logsPub.getLogs({ address: ADDR.UNIV3_FACTORY, event: factoryAbi[0], fromBlock: from, toBlock: head });
     this.discBlock = head;
 
     for (const c of created) {
@@ -100,7 +100,7 @@ export class Scanner {
     if (head <= this.swapBlock) return;
     let from = this.swapBlock + 1n;
     if (head - from > LOG_CHUNK_BLOCKS) from = head - LOG_CHUNK_BLOCKS + 1n;
-    const swaps = await pub.getLogs({ event: swapEvent, fromBlock: from, toBlock: head });
+    const swaps = await logsPub.getLogs({ event: swapEvent, fromBlock: from, toBlock: head });
     this.swapBlock = head;
 
     // Aggregate swap volume + latest price per pool.
