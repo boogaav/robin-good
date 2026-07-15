@@ -1,6 +1,7 @@
 import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import { formatEther } from "viem";
 import { ADDR, DATA_DIR, HARD, KILL_SWITCH_FILE, LIVE, liveModeExplanation } from "./config.js";
 import { loadParams } from "./params.js";
@@ -141,7 +142,9 @@ export async function buildState() {
   };
 }
 
-const server = http.createServer(async (req, res) => {
+const isMain = process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href;
+
+const server = isMain ? http.createServer(async (req, res) => {
   try {
     if (req.url === "/api/state") {
       const body = JSON.stringify(await buildState());
@@ -158,6 +161,6 @@ const server = http.createServer(async (req, res) => {
     res.writeHead(500, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ error: (e as Error).message }));
   }
-});
+}) : null;
 
-server.listen(PORT, "127.0.0.1", () => console.log(`hood-agent dashboard on http://127.0.0.1:${PORT}`));
+server?.listen(PORT, "127.0.0.1", () => console.log(`Robin Good dashboard on http://127.0.0.1:${PORT}`));
