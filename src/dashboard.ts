@@ -108,7 +108,7 @@ function buildPortfolio(trades: ReturnType<typeof readTrades>, open: EnrichedPos
     .sort((a, b) => b.totalEth - a.totalEth);
 }
 
-async function state() {
+export async function buildState() {
   const trades = readTrades();
   let cum = 0;
   const equity = trades.map((t) => ({ ts: t.closedAt, symbol: t.symbol, pnlEth: t.pnlEth, cumEth: (cum += t.pnlEth) }));
@@ -144,7 +144,7 @@ async function state() {
 const server = http.createServer(async (req, res) => {
   try {
     if (req.url === "/api/state") {
-      const body = JSON.stringify(await state());
+      const body = JSON.stringify(await buildState());
       res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" });
       res.end(body);
     } else if (req.url === "/" || req.url === "/index.html") {

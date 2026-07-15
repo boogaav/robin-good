@@ -125,6 +125,11 @@
   </div>
 </div>
 
+<footer style="margin-top:18px;color:var(--muted);font-size:12px;display:flex;gap:14px;flex-wrap:wrap">
+  <span>Robin Good is an autonomous trading agent — every fill links to its on-chain proof.</span>
+  <a href="https://github.com/boogaav/robin-good" target="_blank" rel="noopener" style="color:var(--series);text-decoration:none">Run your own — GitHub ↗</a>
+  <span>Not financial advice. Memecoins are extremely high risk.</span>
+</footer>
 <script>
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -300,15 +305,27 @@ $("chartwrap").addEventListener("mouseleave", () => {
   if (c) c.style.display = "none";
 });
 
+let staticMode = false;
+async function fetchState() {
+  if (!staticMode) {
+    try {
+      const r = await fetch("/api/state");
+      if (r.ok) return r.json();
+    } catch {}
+    staticMode = true; // no live API — GitHub Pages snapshot mode
+  }
+  return (await fetch("./state.json?t=" + Date.now())).json();
+}
 async function refresh() {
   try {
-    const s = await (await fetch("/api/state")).json();
+    const s = await fetchState();
     const modeEl = $("mode");
     modeEl.textContent = s.live ? "LIVE" : "DRY RUN";
     modeEl.className = "badge " + (s.live ? "live" : "dry");
     $("kill").style.display = s.killSwitch ? "" : "none";
     const sc = s.scanner;
-    $("meta").textContent = `${sc.trackedPools ?? "?"} pools tracked · ${sc.pendingNew ?? "?"} fresh listings · block ${sc.block ?? "?"} · updated ${t(s.now)} UTC`;
+    const staleNote = staticMode ? ` · snapshot ${Math.max(0, Math.round((Date.now() - s.now) / 60000))}m ago` : ` · updated ${t(s.now)} UTC`;
+    $("meta").textContent = `${sc.trackedPools ?? "?"} pools tracked · ${sc.pendingNew ?? "?"} fresh listings · block ${sc.block ?? "?"}${staleNote}`;
     tiles(s); radarTable(s); positionsTable(s); portfolioTable(s); tradesTable(s); chart(s); logFeed(s); lessons(s);
     kv($("params"), s.params, (v) => typeof v === "number" ? +v.toFixed(4) : v);
     kv($("hard"), s.hard);
