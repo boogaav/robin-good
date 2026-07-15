@@ -133,6 +133,41 @@ export function reflect(): boolean {
   return false;
 }
 
+// --- launchpad trust ---------------------------------------------------------
+
+export type LaunchpadStats = { launchpad: string; trades: number; rugs: number; netPnlEth: number };
+
+let lpCache: { at: number; stats: LaunchpadStats[] } | null = null;
+
+/** Per-launchpad record from the journal — who ships rugs, who ships winners. */
+export function launchpadStats(): LaunchpadStats[] {
+  if (lpCache && Date.now() - lpCache.at < 60_000) return lpCache.stats;
+  const byPad = new Map<string, LaunchpadStats>();
+  for (const t of readTrades()) {
+    if (!t.launchpad) continue;
+    const k = t.launchpad.toLowerCase();
+    const s = byPad.get(k) ?? { launchpad: t.launchpad, trades: 0, rugs: 0, netPnlEth: 0 };
+    s.trades++;
+    s.netPnlEth += t.pnlEth;
+    if (t.exitReason === "rug") s.rugs++;
+    byPad.set(k, s);
+  }
+  const stats = [...byPad.values()].sort((a, b) => b.netPnlEth - a.netPnlEth);
+  saveJson("launchpads.json", stats);
+  lpCache = { at: Date.now(), stats };
+  return stats;
+}
+
+const DISTRUST_MIN_TRADES = 3;
+const DISTRUST_RUG_RATE = 0.5;
+
+/** True when a launchpad's record is bad enough that new listings from it are skipped. */
+export function launchpadDistrusted(launchpad: string | undefined): boolean {
+  if (!launchpad) return false;
+  const s = launchpadStats().find((x) => x.launchpad.toLowerCase() === launchpad.toLowerCase());
+  return !!s && s.trades >= DISTRUST_MIN_TRADES && s.rugs / s.trades >= DISTRUST_RUG_RATE;
+}
+
 export function recordEventLesson(text: string) {
   fs.appendFileSync(LESSONS, `\n## ${new Date().toISOString()}\n- ${text}\n`);
 }

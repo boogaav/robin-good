@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { HARD, LIVE, POLL_MS, liveModeExplanation } from "./config.js";
+import { FAST_POLL_MS, HARD, LIVE, liveModeExplanation } from "./config.js";
 import { account } from "./chain.js";
 import { Scanner, type Candidate } from "./scanner.js";
 import { loadParams } from "./params.js";
@@ -9,7 +9,7 @@ import { checkSafety, liquidityCollapsed, addRug } from "./safety.js";
 import { currentPrice } from "./market.js";
 import { archiveForeignModePositions, positions, saveJson, type Position } from "./state.js";
 import { journalTrade, toClosedTrade, type ClosedTrade } from "./journal.js";
-import { reflect, recordEventLesson } from "./learn.js";
+import { launchpadDistrusted, reflect, recordEventLesson } from "./learn.js";
 import { log, sleep } from "./util.js";
 
 const scanner = new Scanner();
@@ -27,7 +27,8 @@ async function managePositions() {
   for (const pos of open) {
     try {
       const info = { pool: pos.pool, token: pos.token, tokenIsToken0: pos.tokenIsToken0, fee: pos.fee, symbol: pos.symbol, decimals: pos.decimals };
-      const price = scanner.latestPrice(pos.pool) ?? (await currentPrice(info).catch(() => undefined));
+      // slot0 direct (multicall-batched) — exit decisions never wait on the sweep
+      const price = (await currentPrice(info).catch(() => undefined)) ?? scanner.latestPrice(pos.pool);
       if (price === undefined || price <= 0) {
         keep.push(pos);
         continue;
@@ -101,6 +102,12 @@ async function tryEnter(c: Candidate) {
   const lastExit = recentExits.get(tokenKey);
   if (lastExit && Date.now() - lastExit < REENTRY_COOLDOWN_MS) return;
 
+  if (c.kind === "newListing" && launchpadDistrusted(c.launchpad)) {
+    scanner.consumeNewPool(c.info.pool);
+    log("safety", `rejected ${c.info.symbol}: launchpad ${c.launchpad} has a rug record — distrusted`);
+    return;
+  }
+
   const sizeEth = c.kind === "momentum" ? p.tradeSizeEth : p.newListingSizeEth;
   const risk = await canEnter(sizeEth);
   if (!risk.allowed) {
@@ -148,15 +155,26 @@ async function tryEnter(c: Candidate) {
   }
 }
 
-async function tick() {
-  await scanner.poll();
-  await managePositions();
+async function fastTick() {
+  await Promise.all([scanner.pollDiscovery(), managePositions()]);
   const p = loadParams();
   saveJson("scanner.json", { ts: Date.now(), stats: scanner.stats(), radar: scanner.radar(p) });
   if (killSwitchOn()) return;
   // New listings first (time-sensitive), then strongest momentum.
   for (const c of scanner.newListingCandidates(p)) await tryEnter(c);
   for (const c of scanner.momentumCandidates(p).slice(0, 3)) await tryEnter(c);
+}
+
+/** Heavy chain-wide swap sweep — own loop so it never blocks exits/snipes. */
+async function sweepLoop() {
+  for (;;) {
+    try {
+      await scanner.pollSwaps();
+    } catch (e) {
+      log("scanner", `sweep error: ${(e as Error).message.slice(0, 120)}`);
+    }
+    await sleep(1000);
+  }
 }
 
 async function main() {
@@ -167,19 +185,20 @@ async function main() {
   const parked = archiveForeignModePositions();
   if (parked) log("agent", `parked ${parked} position(s) from the other mode into positions-archive.jsonl`);
   await scanner.init();
+  void sweepLoop();
   let lastStats = 0;
   for (;;) {
     try {
-      await tick();
+      await fastTick();
     } catch (e) {
       log("agent", `tick error: ${(e as Error).message.slice(0, 200)}`);
     }
     if (Date.now() - lastStats > 60_000) {
       lastStats = Date.now();
       const s = scanner.stats();
-      log("agent", `tracking ${s.trackedPools} pools, ${s.pendingNewPools} fresh listings, block ${s.lastBlock}, open positions ${positions.load().length}`);
+      log("agent", `tracking ${s.trackedPools} pools, ${s.pendingNewPools} fresh listings, block ${s.lastBlock} (sweep lag ${s.swapLagBlocks}), open positions ${positions.load().length}`);
     }
-    await sleep(POLL_MS);
+    await sleep(FAST_POLL_MS);
   }
 }
 

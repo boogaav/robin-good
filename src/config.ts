@@ -72,4 +72,6 @@ export function liveModeExplanation(): string {
 }
 
 export const POLL_MS = envNum("POLL_MS", 5000);
+/** Fast loop cadence: discovery, exits, entries. */
+export const FAST_POLL_MS = envNum("FAST_POLL_MS", 3000);
 export const LOG_CHUNK_BLOCKS = 2000n;

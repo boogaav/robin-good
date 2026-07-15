@@ -46,26 +46,28 @@ export class Scanner {
   private tracks = new Map<string, PoolTrack>();
   private newPools = new Map<string, { info: PoolInfo; createdAtMs: number; launchpad?: string }>();
   private launchpads = new Map<string, string>(); // pool -> creation-tx target
-  private lastBlock: bigint = 0n;
+  private discBlock: bigint = 0n; // fast cursor: factory PoolCreated (address-filtered, cheap)
+  private swapBlock: bigint = 0n; // slow cursor: chain-wide Swap sweep (heavy)
 
   async init() {
-    this.lastBlock = await pub.getBlockNumber();
-    log("scanner", `starting from block ${this.lastBlock}`);
+    const head = await pub.getBlockNumber();
+    this.discBlock = head;
+    this.swapBlock = head;
+    log("scanner", `starting from block ${head}`);
   }
 
-  /** One tick: ingest new blocks' PoolCreated + Swap logs, update state. */
-  async poll(): Promise<void> {
+  /**
+   * FAST path — new-pool discovery only. Address-filtered log query, returns
+   * in well under a second; runs on the fast loop so listings are caught and
+   * exits are never blocked behind the heavy sweep.
+   */
+  async pollDiscovery(): Promise<void> {
     const head = await pub.getBlockNumber();
-    if (head <= this.lastBlock) return;
-    let from = this.lastBlock + 1n;
-    // If we fell far behind (restart), skip ahead rather than replaying history.
+    if (head <= this.discBlock) return;
+    let from = this.discBlock + 1n;
     if (head - from > LOG_CHUNK_BLOCKS) from = head - LOG_CHUNK_BLOCKS + 1n;
-
-    const [created, swaps] = await Promise.all([
-      pub.getLogs({ address: ADDR.UNIV3_FACTORY, event: factoryAbi[0], fromBlock: from, toBlock: head }),
-      pub.getLogs({ event: swapEvent, fromBlock: from, toBlock: head }),
-    ]);
-    this.lastBlock = head;
+    const created = await pub.getLogs({ address: ADDR.UNIV3_FACTORY, event: factoryAbi[0], fromBlock: from, toBlock: head });
+    this.discBlock = head;
 
     for (const c of created) {
       const { token0, token1, pool } = c.args;
@@ -87,6 +89,19 @@ export class Scanner {
       this.newPools.set(pool.toLowerCase(), { info, createdAtMs: Date.now(), launchpad });
       log("discovery", `new WETH pool: ${info.symbol} ${pool} fee=${info.fee}${launchpad ? ` via ${launchpad}` : ""}`);
     }
+  }
+
+  /**
+   * SLOW path — chain-wide Swap sweep for volume/price tracking. Runs in its
+   * own loop; a slow RPC response here delays momentum data, never exits.
+   */
+  async pollSwaps(): Promise<void> {
+    const head = await pub.getBlockNumber();
+    if (head <= this.swapBlock) return;
+    let from = this.swapBlock + 1n;
+    if (head - from > LOG_CHUNK_BLOCKS) from = head - LOG_CHUNK_BLOCKS + 1n;
+    const swaps = await pub.getLogs({ event: swapEvent, fromBlock: from, toBlock: head });
+    this.swapBlock = head;
 
     // Aggregate swap volume + latest price per pool.
     const now = Date.now();
@@ -184,7 +199,7 @@ export class Scanner {
   }
 
   stats() {
-    return { trackedPools: this.tracks.size, pendingNewPools: this.newPools.size, lastBlock: this.lastBlock };
+    return { trackedPools: this.tracks.size, pendingNewPools: this.newPools.size, lastBlock: this.discBlock, swapLagBlocks: Number(this.discBlock - this.swapBlock) };
   }
 
   /** What the scanner is watching right now — top pools by recent volume. */

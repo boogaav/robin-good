@@ -8,11 +8,13 @@ export const robinhoodChain = defineChain({
   nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
   rpcUrls: { default: { http: [RPC_URL] } },
   blockExplorers: { default: { name: "Blockscout", url: EXPLORER } },
+  contracts: { multicall3: { address: "0xcA11bde05977b3631167028862bE2a173976CA11" } }, // verified deployed
 });
 
 export const pub = createPublicClient({
   chain: robinhoodChain,
-  transport: http(RPC_URL, { retryCount: 3, timeout: 15_000 }),
+  transport: http(RPC_URL, { batch: { wait: 30 }, retryCount: 3, timeout: 15_000 }),
+  batch: { multicall: { wait: 30 } },
 });
 
 export const account: Account | undefined = LIVE && PRIVATE_KEY ? privateKeyToAccount(PRIVATE_KEY) : undefined;
