@@ -5,7 +5,8 @@ import { Scanner, type Candidate } from "./scanner.js";
 import { loadParams } from "./params.js";
 import { buy, sell } from "./executor.js";
 import { canEnter, killSwitchOn, recordPnl, recordSpend } from "./risk.js";
-import { checkSafety, liquidityCollapsed, addRug } from "./safety.js";
+import { checkSafety, liquidityCollapsed, addRug, screenCreator } from "./safety.js";
+import { notify, notifierEnabled, proofLink } from "./notify.js";
 import { currentPrice } from "./market.js";
 import { archiveForeignModePositions, positions, saveJson, type Position } from "./state.js";
 import { journalTrade, toClosedTrade, type ClosedTrade } from "./journal.js";
@@ -51,12 +52,36 @@ async function managePositions() {
         continue;
       }
 
+      // Scale out at take-profit: bank takeProfitSellPct, trail the rest.
+      if (exitReason === "takeProfit" && !pos.partialTaken && p.takeProfitSellPct < 100) {
+        const sellAmt = (BigInt(pos.tokenAmount) * BigInt(Math.round(p.takeProfitSellPct))) / 100n;
+        if (sellAmt > 0n) {
+          const fill = await sell(info, sellAmt);
+          const share = p.takeProfitSellPct / 100;
+          const trade = toClosedTrade(
+            { ...pos, costEth: pos.costEth * share, tokenAmount: sellAmt.toString() },
+            fill.ethAmount, "takeProfit", fill.simulated, fill.txHash,
+          );
+          journalTrade(trade);
+          recordPnl(trade.pnlEth);
+          pos.tokenAmount = (BigInt(pos.tokenAmount) - sellAmt).toString();
+          pos.costEth *= 1 - share;
+          pos.partialTaken = true;
+          log("trade", `PARTIAL ${pos.symbol}: banked ${p.takeProfitSellPct}% at +${(gain * 100).toFixed(1)}% (${trade.pnlEth.toFixed(5)} ETH) — trailing the rest`);
+          notify(`💰 <b>PARTIAL ${pos.symbol}</b> banked ${p.takeProfitSellPct}% at +${(gain * 100).toFixed(1)}% (${trade.pnlEth >= 0 ? "+" : ""}${trade.pnlEth.toFixed(5)} ETH) ${proofLink(fill.txHash, "proof")} — trailing the rest`);
+          reflect();
+          keep.push(pos);
+          continue;
+        }
+      }
+
       const fill = await sell(info, BigInt(pos.tokenAmount));
       const trade = toClosedTrade(pos, fill.ethAmount, exitReason, fill.simulated, fill.txHash);
       journalTrade(trade);
       recordPnl(trade.pnlEth);
       recentExits.set(pos.token.toLowerCase(), Date.now());
       log("trade", `CLOSED ${pos.symbol} [${exitReason}] pnl ${trade.pnlEth.toFixed(5)} ETH (${trade.pnlPct.toFixed(1)}%) after ${trade.holdMin.toFixed(0)}m`);
+      notify(`${trade.pnlEth >= 0 ? "🟢" : "🔴"} <b>SELL ${pos.symbol}</b> [${exitReason}] ${trade.pnlEth >= 0 ? "+" : ""}${trade.pnlEth.toFixed(5)} ETH (${trade.pnlPct.toFixed(1)}%) after ${trade.holdMin.toFixed(0)}m ${proofLink(fill.txHash, "proof")}`);
 
       if (exitReason === "rug") {
         await addRug(pos.token, `rugged while held, pnl ${trade.pnlPct.toFixed(0)}%`);
@@ -77,6 +102,7 @@ async function managePositions() {
           recordPnl(trade.pnlEth);
           recentExits.set(pos.token.toLowerCase(), Date.now());
           sellRevertCounts.delete(pos.id);
+          notify(`☠️ <b>WRITE-OFF ${pos.symbol}</b> — honeypot (sells revert), -${pos.costEth.toFixed(5)} ETH. Creator blacklisted.`);
           await addRug(pos.token, "sell quote reverts — honeypot armed after entry");
           recordEventLesson(
             `Honeypot write-off: ${pos.symbol} (${pos.token}) passed the entry round-trip check but sells revert now. ` +
@@ -122,6 +148,13 @@ async function tryEnter(c: Candidate) {
     return;
   }
 
+  // Dev-wallet screen: fresh dust-balance EOA deployers are classic rug setups.
+  const creatorScreen = await screenCreator(c.info.token);
+  if (!creatorScreen.ok) {
+    log("safety", `rejected ${c.info.symbol} (${c.kind}): ${creatorScreen.reason}`);
+    return;
+  }
+
   try {
     const fill = await buy(c.info, sizeEth);
     const pos: Position = {
@@ -142,7 +175,7 @@ async function tryEnter(c: Candidate) {
       launchpad: c.launchpad,
       entryTxHash: fill.txHash,
       openedAt: Date.now(),
-      entrySignal: { ...c.features, roundTripLossPct: safety.roundTripLossPct ?? 0, poolWethEth: safety.poolWethEth ?? 0 },
+      entrySignal: { ...c.features, ...creatorScreen.features, roundTripLossPct: safety.roundTripLossPct ?? 0, poolWethEth: safety.poolWethEth ?? 0 },
       paramsAtEntry: { ...p },
     };
     const all = positions.load();
@@ -150,6 +183,7 @@ async function tryEnter(c: Candidate) {
     positions.save(all);
     recordSpend(fill.ethAmount);
     log("trade", `OPENED ${c.kind} ${c.info.symbol} size ${sizeEth} ETH @ ${c.price.toExponential(4)} ETH/token ${fill.simulated ? "(dry)" : fill.txHash}`);
+    notify(`🟢 <b>BUY ${c.info.symbol}</b> [${c.kind}] ${sizeEth} ETH ${proofLink(fill.txHash, "proof")}`);
   } catch (e) {
     log("trade", `buy failed ${c.info.symbol}: ${(e as Error).message.slice(0, 150)}`);
   }
@@ -180,6 +214,7 @@ async function sweepLoop() {
 async function main() {
   log("agent", `hood-agent starting — ${liveModeExplanation()}`);
   if (LIVE && account) log("agent", `wallet: ${account.address}`);
+  log("agent", `telegram notifications: ${notifierEnabled ? "on" : "off (set TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID)"}`);
   log("agent", `hard caps: ${JSON.stringify(HARD)}`);
   log("agent", `params: ${JSON.stringify(loadParams())}`);
   const parked = archiveForeignModePositions();

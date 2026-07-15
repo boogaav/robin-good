@@ -59,6 +59,7 @@ export type Position = {
   poolWethAtEntry: number;   // WETH-side liquidity at entry, for rug detection
   launchpad?: string;        // contract that created the pool (rug-rate correlation)
   entryTxHash?: string;      // live buys: on-chain proof
+  partialTaken?: boolean;    // scaled out at TP once; remainder rides the trail
   openedAt: number;
   entrySignal: Record<string, number>; // feature snapshot for the learning loop
   paramsAtEntry: Record<string, number>;

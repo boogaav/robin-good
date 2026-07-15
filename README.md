@@ -43,13 +43,19 @@ Every ~5s tick:
 **The learner can never raise risk beyond your `.env` hard caps** — bounds in
 `src/params.ts` are clamped to them.
 
-## Run
+## Quickstart
 
 ```bash
-npm install
-cp .env.example .env   # edit caps if desired
-npm run dev            # starts in DRY_RUN: real market data, simulated fills
+git clone https://github.com/boogaav/robin-good && cd robin-good
+npm install && npm run setup   # scaffolds .env with safe dry-run defaults
+npm run dev                    # starts in DRY_RUN: real market data, simulated fills
+npm run dash                   # dashboard at http://localhost:5190
 ```
+
+Optional: Telegram notifications for every fill (with explorer proof links) —
+create a bot via @BotFather and set `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID`
+in `.env`. Recommended for live mode: a free Alchemy RPC endpoint (see
+`.env.example`) — the public RPC is rate-limited.
 
 Other commands:
 

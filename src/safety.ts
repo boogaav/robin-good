@@ -68,15 +68,48 @@ export async function checkSafety(
   }
 }
 
-/** Token contract creator via Blockscout; null if unavailable. */
+/** Token contract creator via Blockscout; null if unavailable. Cached. */
+const creatorCache = new Map<string, `0x${string}` | null>();
 export async function tokenCreator(token: `0x${string}`): Promise<`0x${string}` | null> {
+  const key = token.toLowerCase();
+  if (creatorCache.has(key)) return creatorCache.get(key)!;
   try {
     const res = await fetch(`${EXPLORER}/api/v2/addresses/${token}`, { signal: AbortSignal.timeout(8000) });
-    if (!res.ok) return null;
+    if (!res.ok) return null; // transient — don't cache
     const j = (await res.json()) as { creator_address_hash?: string };
-    return j.creator_address_hash ? getAddress(j.creator_address_hash) : null;
+    const creator = j.creator_address_hash ? getAddress(j.creator_address_hash) : null;
+    creatorCache.set(key, creator);
+    return creator;
   } catch {
     return null;
+  }
+}
+
+export type CreatorScreen = { ok: boolean; reason: string; features: Record<string, number> };
+
+/**
+ * Dev-wallet screening: a token deployed by a fresh dust-balance EOA is a
+ * classic rug setup. Contract deployers (launchpads) pass — they're judged by
+ * the launchpad trust record instead. Unknown data passes (never block on a
+ * flaky explorer), but everything observed is journaled for the learner.
+ */
+export async function screenCreator(token: `0x${string}`): Promise<CreatorScreen> {
+  const creator = await tokenCreator(token);
+  if (!creator) return { ok: true, reason: "creator unknown", features: {} };
+  try {
+    const res = await fetch(`${EXPLORER}/api/v2/addresses/${creator}`, { signal: AbortSignal.timeout(8000) });
+    if (!res.ok) return { ok: true, reason: `explorer ${res.status}`, features: {} };
+    const j = (await res.json()) as { is_contract?: boolean; coin_balance?: string; transactions_count?: string | number; transaction_count?: string | number };
+    if (j.is_contract) return { ok: true, reason: "contract deployer (launchpad)", features: { creatorIsContract: 1 } };
+    const balEth = Number(j.coin_balance ?? 0) / 1e18;
+    const txRaw = j.transactions_count ?? j.transaction_count;
+    const txCount = txRaw === undefined ? -1 : Number(txRaw);
+    const features = { creatorIsContract: 0, creatorBalEth: balEth, creatorTxCount: txCount };
+    if (txCount >= 0 && txCount < 3 && balEth < 0.002)
+      return { ok: false, reason: `fresh burner deployer (${txCount} txs, ${balEth.toFixed(4)} ETH)`, features };
+    return { ok: true, reason: "creator passes", features };
+  } catch {
+    return { ok: true, reason: "screen unavailable", features: {} };
   }
 }
 

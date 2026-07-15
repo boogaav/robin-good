@@ -10,7 +10,8 @@
     "reflect": "tsx src/learn.ts --report",
     "typecheck": "tsc --noEmit",
     "dash": "tsx src/dashboard.ts",
-    "wallet": "tsx src/wallet.ts"
+    "wallet": "tsx src/wallet.ts",
+    "setup": "tsx src/setup.ts"
   },
   "keywords": [],
   "author": "",

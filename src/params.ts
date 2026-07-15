@@ -20,6 +20,7 @@ export type Params = {
   maxRoundTripLossPct: number;   // honeypot check: buy+sell quote loss tolerance
   // exits
   takeProfitPct: number;
+  takeProfitSellPct: number;     // % of position sold at TP; remainder trails (100 = full exit)
   trailingStopPct: number;
   hardStopPct: number;
   maxHoldMin: number;
@@ -35,6 +36,7 @@ export const BOUNDS: Record<keyof Params, [number, number]> = {
   minPoolWethEth: [0.5, 20],
   maxRoundTripLossPct: [1, 10],
   takeProfitPct: [10, 200],
+  takeProfitSellPct: [25, 100],
   trailingStopPct: [5, 40],
   hardStopPct: [5, 50],
   maxHoldMin: [10, 720],
@@ -50,6 +52,7 @@ export const DEFAULTS: Params = {
   minPoolWethEth: 2,
   maxRoundTripLossPct: 6,
   takeProfitPct: 40,
+  takeProfitSellPct: 50,
   trailingStopPct: 15,
   hardStopPct: 20,
   maxHoldMin: 120,
