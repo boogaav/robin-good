@@ -1,0 +1,27 @@
+{
+  "name": "hood-agent",
+  "version": "0.1.0",
+  "description": "Memecoin momentum/new-listing trading agent for Robinhood Chain with a self-improving learning loop",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev": "tsx src/index.ts",
+    "status": "tsx src/status.ts",
+    "reflect": "tsx src/learn.ts --report",
+    "typecheck": "tsc --noEmit",
+    "dash": "tsx src/dashboard.ts",
+    "wallet": "tsx src/wallet.ts"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@types/node": "^26.1.1",
+    "dotenv": "^17.4.2",
+    "tsx": "^4.23.0",
+    "typescript": "^7.0.2",
+    "undici": "^8.7.0",
+    "viem": "^2.55.1"
+  },
+  "type": "module"
+}
