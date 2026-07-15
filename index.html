@@ -1,0 +1,340 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Robin Good — Your Memecoin Trader</title>
+<style>
+  :root {
+    --page: #0d0d0d;
+    --surface: #1a1a19;
+    --ink: #ffffff;
+    --ink-2: #c3c2b7;
+    --muted: #898781;
+    --grid: #2c2c2a;
+    --baseline: #383835;
+    --border: rgba(255,255,255,0.10);
+    --series: #3987e5;
+    --good: #0ca30c;
+    --critical: #d03b3b;
+    --warning: #fab219;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body {
+    background: var(--page); color: var(--ink);
+    font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+    padding: 20px; min-height: 100vh;
+  }
+  header { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; margin-bottom: 18px; }
+  h1 { font-size: 18px; letter-spacing: 0.06em; }
+  h1 span { color: var(--muted); font-weight: 400; }
+  .badge { font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: 999px; border: 1px solid var(--border); letter-spacing: 0.08em; }
+  .badge.dry { color: var(--warning); }
+  .badge.live { color: var(--critical); }
+  .badge.kill { color: var(--critical); background: rgba(208,59,59,0.12); }
+  .meta { color: var(--muted); font-size: 12px; margin-left: auto; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; margin-bottom: 14px; }
+  .stale { color: var(--warning); font-size: 11px; }
+  .new-badge { font-size: 9px; font-weight: 700; color: var(--good); border: 1px solid var(--good); border-radius: 3px; padding: 0 4px; margin-left: 5px; letter-spacing: 0.05em; }
+  .tile { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
+  .tile .k { color: var(--muted); font-size: 11px; letter-spacing: 0.07em; text-transform: uppercase; }
+  .tile .v { font-size: 22px; font-weight: 650; margin-top: 3px; }
+  .tile .s { color: var(--ink-2); font-size: 11px; margin-top: 2px; }
+  .cols { display: grid; grid-template-columns: 2fr 1fr; gap: 14px; align-items: start; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; margin-bottom: 14px; }
+  .card h2 { font-size: 12px; color: var(--ink-2); letter-spacing: 0.07em; text-transform: uppercase; margin-bottom: 10px; font-weight: 600; }
+  table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  th { text-align: left; color: var(--muted); font-size: 11px; font-weight: 500; padding: 4px 8px; border-bottom: 1px solid var(--grid); }
+  td { padding: 5px 8px; border-bottom: 1px solid var(--grid); font-size: 13px; }
+  tr:last-child td { border-bottom: 0; }
+  td.num, th.num { text-align: right; }
+  .up { color: var(--good); }
+  .down { color: var(--critical); }
+  .dim { color: var(--muted); }
+  .sym { font-weight: 600; }
+  .tag { font-size: 10px; color: var(--ink-2); border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; }
+  #chartwrap { position: relative; }
+  #tooltip {
+    position: absolute; display: none; pointer-events: none; z-index: 2;
+    background: #0d0d0dee; border: 1px solid var(--border); border-radius: 8px;
+    padding: 7px 10px; font-size: 12px; white-space: nowrap;
+  }
+  #log { font: 11px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--ink-2); max-height: 300px; overflow-y: auto; overflow-x: auto; }
+  #log div { white-space: nowrap; }
+  #lessons { font-size: 12.5px; color: var(--ink-2); max-height: 260px; overflow-y: auto; }
+  #lessons h3 { font-size: 11px; color: var(--muted); margin: 8px 0 3px; font-weight: 500; }
+  #lessons p { margin: 3px 0; }
+  .kv { display: grid; grid-template-columns: 1fr auto; gap: 2px 12px; font-size: 12.5px; font-variant-numeric: tabular-nums; }
+  .kv .k { color: var(--muted); }
+  .kv .v { text-align: right; color: var(--ink-2); }
+  .empty { color: var(--muted); font-size: 12.5px; padding: 8px 0; }
+  .scroll { overflow-x: auto; }
+  @media (max-width: 1100px) { .grid { grid-template-columns: repeat(3, 1fr); } .cols { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>ROBIN GOOD <span>· Your Memecoin Trader</span></h1>
+  <span id="mode" class="badge dry">…</span>
+  <span id="kill" class="badge kill" style="display:none">KILL SWITCH ON</span>
+  <span class="meta" id="meta">connecting…</span>
+</header>
+
+<div class="grid" id="tiles"></div>
+
+<div class="cols">
+  <div>
+    <div class="card">
+      <h2>Equity curve — cumulative realized PnL (ETH)</h2>
+      <div id="chartwrap"><svg id="chart" width="100%" height="240" role="img" aria-label="Cumulative realized profit and loss in ETH across closed trades"></svg><div id="tooltip"></div></div>
+    </div>
+    <div class="card">
+      <h2>Radar — what the scanner sees <span id="radarage" class="stale"></span></h2>
+      <div class="scroll"><table id="radar"></table></div>
+    </div>
+    <div class="card">
+      <h2>Open positions</h2>
+      <div class="scroll"><table id="positions"></table></div>
+    </div>
+    <div class="card">
+      <h2>Portfolio — P&amp;L per token <span class="dim" id="pfnote"></span></h2>
+      <div class="scroll"><table id="portfolio"></table></div>
+    </div>
+    <div class="card">
+      <h2>Closed trades</h2>
+      <div class="scroll"><table id="trades"></table></div>
+    </div>
+  </div>
+  <div>
+    <div class="card">
+      <h2>Live activity</h2>
+      <div id="log"></div>
+    </div>
+    <div class="card">
+      <h2>Lessons learned</h2>
+      <div id="lessons"></div>
+    </div>
+    <div class="card">
+      <h2>Strategy params <span class="dim">(self-tuned)</span></h2>
+      <div class="kv" id="params"></div>
+    </div>
+    <div class="card">
+      <h2>Hard caps <span class="dim">(.env, immutable)</span></h2>
+      <div class="kv" id="hard"></div>
+    </div>
+  </div>
+</div>
+
+<footer style="margin-top:18px;color:var(--muted);font-size:12px;display:flex;gap:14px;flex-wrap:wrap">
+  <span>Robin Good is an autonomous trading agent — every fill links to its on-chain proof.</span>
+  <a href="https://github.com/boogaav/robin-good" target="_blank" rel="noopener" style="color:var(--series);text-decoration:none">Run your own — GitHub ↗</a>
+  <span>Not financial advice. Memecoins are extremely high risk.</span>
+</footer>
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const fmt = (n, d = 5) => (n === null || n === undefined || Number.isNaN(n)) ? "—" : Number(n).toFixed(d);
+const signed = (n, d = 5, unit = "") => n === null ? "—" : `${n > 0 ? "+" : ""}${fmt(n, d)}${unit}`;
+const cls = (n) => (n === null ? "dim" : n > 0 ? "up" : n < 0 ? "down" : "dim");
+const ago = (ts) => { const m = (Date.now() - ts) / 60000; return m < 60 ? `${m.toFixed(0)}m` : `${(m / 60).toFixed(1)}h`; };
+const t = (ts) => new Date(ts).toISOString().slice(11, 19);
+const EXPLORER = "https://robinhoodchain.blockscout.com";
+const txLink = (hash, label) => hash ? `<a href="${EXPLORER}/tx/${esc(hash)}" target="_blank" rel="noopener" style="color:var(--series);text-decoration:none">${label}↗</a>` : "";
+const tokenLink = (addr, text) => `<a href="${EXPLORER}/token/${esc(addr)}" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">${esc(text)}</a>`;
+
+function tiles(s) {
+  const wr = s.stats.n ? (s.stats.wins / s.stats.n) * 100 : null;
+  const items = [];
+  if (s.wallet) {
+    const cash = (s.wallet.ethBalance ?? 0) + (s.wallet.wethBalance ?? 0);
+    const inPositions = s.positions.reduce((a, p) => a + (p.valueEth ?? p.costEth), 0);
+    items.push(["Wallet", s.wallet.ethBalance === null ? "—" : fmt(cash, 5) + " ETH", `<a href="${EXPLORER}/address/${esc(s.wallet.address)}" target="_blank" rel="noopener" style="color:var(--series);text-decoration:none">${esc(s.wallet.address.slice(0, 6) + "…" + s.wallet.address.slice(-4))}↗</a>`, ""]);
+    items.push(["Equity", s.wallet.ethBalance === null ? "—" : fmt(cash + inPositions, 5) + " ETH", `${fmt(inPositions, 5)} in positions`, ""]);
+  }
+  items.push(
+    ["Net PnL (all-time)", signed(s.stats.netEth) + " ETH", `${s.stats.n} closed trades`, cls(s.stats.netEth)],
+    ["Today realized", signed(s.daily.realizedPnlEth) + " ETH", s.daily.day, cls(s.daily.realizedPnlEth)],
+    ["Today deployed", fmt(s.daily.spendEth, 4) + " ETH", `cap ${s.hard.MAX_DAILY_SPEND_ETH}`, ""],
+    ["Win rate", wr === null ? "—" : wr.toFixed(0) + "%", `${s.stats.wins}W / ${s.stats.n - s.stats.wins}L`, ""],
+    ["Open positions", `${s.positions.length} / ${s.hard.MAX_OPEN_POSITIONS}`, "slots used", ""],
+    ["Blacklist", `${s.stats.blTokens}`, `${s.stats.blCreators} creators banned`, ""],
+  );
+  // sub is internally generated (dates, counts, pre-escaped links) — rendered as-is
+  $("tiles").innerHTML = items.map(([k, v, sub, c]) =>
+    `<div class="tile"><div class="k">${k}</div><div class="v ${c}">${v}</div><div class="s">${sub}</div></div>`).join("");
+}
+
+function radarTable(s) {
+  const age = s.radar.ts ? (Date.now() - s.radar.ts) / 1000 : null;
+  $("radarage").textContent = age === null ? "(no snapshot yet)" : age > 120 ? `(stale — ${Math.round(age / 60)}m old)` : "";
+  const rows = s.radar.radar ?? [];
+  if (!rows.length) { $("radar").innerHTML = `<tr><td class="empty">scanner warming up — radar appears after the first snapshot</td></tr>`; return; }
+  const head = `<tr><th>Token</th><th class="num">Price (ETH)</th><th class="num">Δ lookback</th><th class="num">Vol ×base</th><th class="num">Recent vol</th><th>Launchpad</th></tr>`;
+  $("radar").innerHTML = head + rows.map((r) => `<tr>
+    <td class="sym">${esc(r.symbol)}${r.isNew ? '<span class="new-badge">NEW</span>' : ""}</td>
+    <td class="num dim">${r.price === null ? "—" : Number(r.price).toExponential(3)}</td>
+    <td class="num ${cls(r.gainPct)}">${r.gainPct === null ? "—" : signed(r.gainPct, 1, "%")}</td>
+    <td class="num">${r.volRatio === null ? "—" : Number(r.volRatio).toFixed(1) + "×"}</td>
+    <td class="num">${Number(r.recentVolEth).toFixed(3)}</td>
+    <td class="dim">${r.launchpad ? esc(r.launchpad.slice(0, 6) + "…" + r.launchpad.slice(-4)) : "—"}</td></tr>`).join("");
+}
+
+function positionsTable(s) {
+  if (!s.positions.length) { $("positions").innerHTML = `<tr><td class="empty">no open positions</td></tr>`; return; }
+  const head = `<tr><th>Token</th><th>Strategy</th><th class="num">Cost</th><th class="num">Mark value</th><th class="num">uPnL</th><th class="num">Peak</th><th class="num">Age</th><th>Proof</th></tr>`;
+  $("positions").innerHTML = head + s.positions.map((p) => `<tr>
+    <td class="sym">${tokenLink(p.token, p.symbol)}</td>
+    <td><span class="tag">${p.strategy}</span></td>
+    <td class="num">${fmt(p.costEth, 4)}</td>
+    <td class="num">${p.valueEth === null ? '<span class="dim">unpriced</span>' : fmt(p.valueEth, 5)}</td>
+    <td class="num ${cls(p.uPnlPct)}">${p.uPnlPct === null ? "—" : signed(p.uPnlPct, 1, "%")}</td>
+    <td class="num dim">+${p.peakGainPct.toFixed(1)}%</td>
+    <td class="num dim">${ago(p.openedAt)}</td>
+    <td>${txLink(p.entryTxHash, "buy") || '<span class="dim">paper</span>'}</td></tr>`).join("");
+}
+
+function tradesTable(s) {
+  if (!s.trades.length) { $("trades").innerHTML = `<tr><td class="empty">no closed trades yet</td></tr>`; return; }
+  const head = `<tr><th>Closed</th><th>Token</th><th>Strategy</th><th>Exit</th><th class="num">PnL (ETH)</th><th class="num">PnL %</th><th class="num">Held</th><th>Proof</th></tr>`;
+  $("trades").innerHTML = head + s.trades.map((tr) => `<tr>
+    <td class="dim">${t(tr.closedAt)}</td>
+    <td class="sym">${tokenLink(tr.token, tr.symbol)}</td>
+    <td><span class="tag">${tr.strategy}</span></td>
+    <td class="dim">${tr.exitReason}${tr.simulated ? "" : " ⚡"}</td>
+    <td class="num ${cls(tr.pnlEth)}">${signed(tr.pnlEth)}</td>
+    <td class="num ${cls(tr.pnlPct)}">${signed(tr.pnlPct, 1, "%")}</td>
+    <td class="num dim">${tr.holdMin.toFixed(0)}m</td>
+    <td>${tr.simulated ? '<span class="dim">paper</span>' : [txLink(tr.entryTxHash, "buy"), txLink(tr.exitTxHash, "sell")].filter(Boolean).join(" ") || '<span class="dim">—</span>'}</td></tr>`).join("");
+}
+
+function portfolioTable(s) {
+  const rows = s.portfolio ?? [];
+  const anyLive = s.trades.some((t) => !t.simulated) || s.positions.some((p) => p.entryTxHash);
+  $("pfnote").textContent = rows.length && !anyLive ? "(paper history — no live trades yet)" : "";
+  if (!rows.length) { $("portfolio").innerHTML = `<tr><td class="empty">no tokens traded yet</td></tr>`; return; }
+  const head = `<tr><th>Token</th><th class="num">Trades</th><th class="num">W/L</th><th class="num">Realized</th><th class="num">Holding now</th><th class="num">uPnL</th><th class="num">Total P&L</th></tr>`;
+  $("portfolio").innerHTML = head + rows.map((r) => `<tr>
+    <td class="sym">${tokenLink(r.token, r.symbol)}</td>
+    <td class="num dim">${r.trades}</td>
+    <td class="num dim">${r.wins}/${r.trades - r.wins}</td>
+    <td class="num ${cls(r.realizedEth)}">${r.trades ? signed(r.realizedEth) : "—"}</td>
+    <td class="num">${r.heldValueEth === null ? '<span class="dim">—</span>' : fmt(r.heldValueEth, 5) + " ETH"}</td>
+    <td class="num ${cls(r.uPnlEth)}">${r.uPnlEth === null ? '<span class="dim">—</span>' : signed(r.uPnlEth)}</td>
+    <td class="num ${cls(r.totalEth)}"><b>${signed(r.totalEth)}</b></td></tr>`).join("");
+}
+
+function kv(el, obj, fmtV = (v) => v) {
+  el.innerHTML = Object.entries(obj).map(([k, v]) => `<span class="k">${esc(k)}</span><span class="v">${esc(fmtV(v))}</span>`).join("");
+}
+
+function logFeed(s) {
+  const colors = { trade: "var(--series)", learn: "var(--warning)", discovery: "var(--good)", safety: "var(--critical)", risk: "var(--critical)" };
+  const el = $("log");
+  const atBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 8;
+  el.innerHTML = s.log.map((l) => {
+    const m = l.match(/^\S+ \[(\w+)\] (.*)$/);
+    if (!m) return "";
+    const c = colors[m[1]] ?? "var(--muted)";
+    return `<div><span style="color:${c}">[${m[1]}]</span> ${esc(m[2])}</div>`;
+  }).join("");
+  if (atBottom) el.scrollTop = el.scrollHeight;
+}
+
+function lessons(s) {
+  if (!s.lessons.trim()) { $("lessons").innerHTML = `<div class="empty">nothing yet — lessons appear after the agent adapts</div>`; return; }
+  $("lessons").innerHTML = s.lessons.split("\n").filter(Boolean).map((l) =>
+    l.startsWith("## ") ? `<h3>${esc(l.slice(3))}</h3>` : `<p>${esc(l.replace(/^- /, ""))}</p>`).reverse().join("");
+}
+
+// --- equity curve (single series, crosshair + tooltip) -----------------------
+let eqPoints = [];
+function chart(s) {
+  const svg = $("chart");
+  const W = svg.clientWidth || 700, H = 240, padL = 54, padR = 12, padT = 12, padB = 20;
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  const eq = s.equity;
+  if (eq.length < 1) { svg.innerHTML = `<text x="${W / 2}" y="${H / 2}" fill="var(--muted)" text-anchor="middle" font-size="12">no closed trades yet</text>`; eqPoints = []; return; }
+  const pts = [{ ts: eq[0].ts - 1, cumEth: 0, symbol: "start", pnlEth: 0 }, ...eq];
+  const ys = pts.map((p) => p.cumEth);
+  let lo = Math.min(0, ...ys), hi = Math.max(0, ...ys);
+  if (hi - lo < 1e-9) { hi += 1e-3; lo -= 1e-3; }
+  const pad = (hi - lo) * 0.12; lo -= pad; hi += pad;
+  const x = (i) => padL + (i / (pts.length - 1)) * (W - padL - padR);
+  const y = (v) => padT + (1 - (v - lo) / (hi - lo)) * (H - padT - padB);
+  const ticks = 4;
+  let g = "";
+  for (let i = 0; i <= ticks; i++) {
+    const v = lo + ((hi - lo) * i) / ticks, yy = y(v);
+    g += `<line x1="${padL}" x2="${W - padR}" y1="${yy}" y2="${yy}" stroke="var(--grid)" stroke-width="1"/>`;
+    g += `<text x="${padL - 8}" y="${yy + 4}" fill="var(--muted)" font-size="10" text-anchor="end">${v.toFixed(4)}</text>`;
+  }
+  const y0 = y(0);
+  g += `<line x1="${padL}" x2="${W - padR}" y1="${y0}" y2="${y0}" stroke="var(--baseline)" stroke-width="1" stroke-dasharray="4 4"/>`;
+  const path = pts.map((p, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(p.cumEth).toFixed(1)}`).join("");
+  const area = `${path}L${x(pts.length - 1).toFixed(1)},${y0}L${x(0).toFixed(1)},${y0}Z`;
+  g += `<path d="${area}" fill="var(--series)" opacity="0.10"/>`;
+  g += `<path d="${path}" fill="none" stroke="var(--series)" stroke-width="2" stroke-linejoin="round"/>`;
+  g += `<circle id="hoverdot" r="4" fill="var(--series)" stroke="var(--surface)" stroke-width="2" style="display:none"/>`;
+  g += `<line id="crosshair" y1="${padT}" y2="${H - padB}" stroke="var(--muted)" stroke-width="1" stroke-dasharray="3 3" style="display:none"/>`;
+  svg.innerHTML = g;
+  eqPoints = pts.map((p, i) => ({ ...p, cx: x(i), cy: y(p.cumEth) }));
+}
+
+$("chartwrap").addEventListener("mousemove", (e) => {
+  if (!eqPoints.length) return;
+  const rect = $("chart").getBoundingClientRect();
+  const mx = e.clientX - rect.left;
+  let best = eqPoints[0];
+  for (const p of eqPoints) if (Math.abs(p.cx - mx) < Math.abs(best.cx - mx)) best = p;
+  const dot = $("hoverdot"), ch = $("crosshair"), tip = $("tooltip");
+  dot.style.display = ch.style.display = "block";
+  dot.setAttribute("cx", best.cx); dot.setAttribute("cy", best.cy);
+  ch.setAttribute("x1", best.cx); ch.setAttribute("x2", best.cx);
+  tip.style.display = "block";
+  tip.innerHTML = best.symbol === "start"
+    ? `<span class="dim">start</span>`
+    : `<b>${esc(best.symbol)}</b> <span class="${cls(best.pnlEth)}">${signed(best.pnlEth)} ETH</span><br><span class="dim">cumulative</span> ${signed(best.cumEth)} ETH<br><span class="dim">${new Date(best.ts).toLocaleString()}</span>`;
+  const wrapW = $("chartwrap").clientWidth;
+  tip.style.left = Math.min(best.cx + 12, wrapW - tip.offsetWidth - 4) + "px";
+  tip.style.top = Math.max(best.cy - 60, 0) + "px";
+});
+$("chartwrap").addEventListener("mouseleave", () => {
+  $("tooltip").style.display = "none";
+  const d = $("hoverdot"), c = $("crosshair");
+  if (d) d.style.display = "none";
+  if (c) c.style.display = "none";
+});
+
+let staticMode = false;
+async function fetchState() {
+  if (!staticMode) {
+    try {
+      const r = await fetch("/api/state");
+      if (r.ok) return r.json();
+    } catch {}
+    staticMode = true; // no live API — GitHub Pages snapshot mode
+  }
+  return (await fetch("./state.json?t=" + Date.now())).json();
+}
+async function refresh() {
+  try {
+    const s = await fetchState();
+    const modeEl = $("mode");
+    modeEl.textContent = s.live ? "LIVE" : "DRY RUN";
+    modeEl.className = "badge " + (s.live ? "live" : "dry");
+    $("kill").style.display = s.killSwitch ? "" : "none";
+    const sc = s.scanner;
+    const staleNote = staticMode ? ` · snapshot ${Math.max(0, Math.round((Date.now() - s.now) / 60000))}m ago` : ` · updated ${t(s.now)} UTC`;
+    $("meta").textContent = `${sc.trackedPools ?? "?"} pools tracked · ${sc.pendingNew ?? "?"} fresh listings · block ${sc.block ?? "?"}${staleNote}`;
+    tiles(s); radarTable(s); positionsTable(s); portfolioTable(s); tradesTable(s); chart(s); logFeed(s); lessons(s);
+    kv($("params"), s.params, (v) => typeof v === "number" ? +v.toFixed(4) : v);
+    kv($("hard"), s.hard);
+  } catch (e) {
+    $("meta").textContent = "agent API unreachable — retrying…";
+  }
+}
+refresh();
+setInterval(refresh, 4000);
+</script>
+</body>
+</html>
