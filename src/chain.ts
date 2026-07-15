@@ -11,9 +11,12 @@ export const robinhoodChain = defineChain({
   contracts: { multicall3: { address: "0xcA11bde05977b3631167028862bE2a173976CA11" } }, // verified deployed
 });
 
+// NOTE: no transport-level JSON-RPC batching — Alchemy's Robinhood endpoint
+// rejects request arrays ("JSON is not a valid request object"). Multicall
+// batching below is the one that matters (N reads -> one eth_call).
 export const pub = createPublicClient({
   chain: robinhoodChain,
-  transport: http(RPC_URL, { batch: { wait: 30 }, retryCount: 3, timeout: 15_000 }),
+  transport: http(RPC_URL, { retryCount: 3, timeout: 15_000 }),
   batch: { multicall: { wait: 30 } },
 });
 
