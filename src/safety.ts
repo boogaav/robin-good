@@ -1,4 +1,4 @@
-import { parseEther, formatEther, getAddress } from "viem";
+import { parseEther, formatEther, getAddress, keccak256 } from "viem";
 import { pub } from "./chain.js";
 import { ADDR, EXPLORER } from "./config.js";
 import { erc20Abi, poolAbi, quoterAbi } from "./abi.js";
@@ -31,6 +31,11 @@ export async function checkSafety(
   const creator = await tokenCreator(token);
   if (creator && bl.creators.includes(creator.toLowerCase()))
     return { ok: false, reason: `creator ${creator} blacklisted` };
+
+  // Reuse of a token template that has produced a honeypot before → skip it.
+  const codehash = await tokenCodeHash(token);
+  if (codehash && bl.codehashes?.includes(codehash))
+    return { ok: false, reason: `code template ${codehash.slice(0, 12)} tied to a past honeypot` };
 
   const poolWeth = await pub.readContract({
     address: ADDR.WETH,
@@ -124,13 +129,44 @@ export async function liquidityCollapsed(pool: `0x${string}`, entryPoolWethEth: 
   }
 }
 
+/**
+ * keccak256 of the token's deployed bytecode. Honeypot factories reuse a single
+ * token template across many launches, so once a template produces ONE honeypot
+ * we can refuse every future instance of that exact code — a defense that
+ * compounds. (It cannot stop the FIRST honeypot of a brand-new template, and it
+ * may also skip a benign token sharing a tainted template — an acceptable trade,
+ * since that template is a proven latent trap.)
+ */
+const codeHashCache = new Map<string, `0x${string}` | null>();
+export async function tokenCodeHash(token: `0x${string}`): Promise<`0x${string}` | null> {
+  const key = token.toLowerCase();
+  if (codeHashCache.has(key)) return codeHashCache.get(key)!;
+  try {
+    const code = await pub.getCode({ address: token });
+    const h = code && code !== "0x" ? keccak256(code) : null;
+    codeHashCache.set(key, h);
+    return h;
+  } catch {
+    return null;
+  }
+}
+
+export async function codehashBlacklisted(token: `0x${string}`): Promise<boolean> {
+  const h = await tokenCodeHash(token);
+  if (!h) return false;
+  return blacklist.load().codehashes?.includes(h) ?? false;
+}
+
 export async function addRug(token: `0x${string}`, note: string) {
   const bl = blacklist.load();
   if (!bl.tokens.includes(token.toLowerCase())) bl.tokens.push(token.toLowerCase());
   const creator = await tokenCreator(token);
   if (creator && !bl.creators.includes(creator.toLowerCase())) bl.creators.push(creator.toLowerCase());
+  const h = await tokenCodeHash(token);
+  bl.codehashes = bl.codehashes ?? [];
+  if (h && !bl.codehashes.includes(h)) bl.codehashes.push(h);
   blacklist.save(bl);
-  log("safety", `blacklisted token ${token}${creator ? ` + creator ${creator}` : ""} (${note})`);
+  log("safety", `blacklisted token ${token}${creator ? ` + creator ${creator}` : ""}${h ? ` + codehash ${h.slice(0, 12)}` : ""} (${note})`);
 }
 
 export { poolAbi };

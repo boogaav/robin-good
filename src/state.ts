@@ -98,7 +98,7 @@ export function archiveForeignModePositions(): number {
   return foreign.length;
 }
 
-export type Blacklist = { tokens: string[]; creators: string[] };
+export type Blacklist = { tokens: string[]; creators: string[]; codehashes?: string[] };
 export const blacklist = {
   load: (): Blacklist => loadJson<Blacklist>("blacklist.json", { tokens: [], creators: [] }),
   save: (b: Blacklist) => saveJson("blacklist.json", b),

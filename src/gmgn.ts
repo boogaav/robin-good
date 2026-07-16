@@ -47,8 +47,14 @@ export async function gmgnScreen(token: `0x${string}`): Promise<GmgnScreen> {
       gmgnSellTax: j.sell_tax ? Number(j.sell_tax) : -1,
       gmgnLpLocked: j.lock_summary?.is_locked === true ? 1 : 0,
     };
-    if (j.is_honeypot === true) res = { ok: false, reason: "GMGN flags honeypot", features };
-    else if (j.is_show_alert === true) res = { ok: false, reason: "GMGN scam alert", features };
+    // Gate ONLY on signals that empirically separate our honeypots from our
+    // winners: explicitly-not-renounced and explicitly-not-open-source (both
+    // caught RT at zero cost to good trades). The is_honeypot / is_show_alert
+    // flags are NOT hard gates — on our own data they false-positived every
+    // winner (STEVES/COTEHARDIE/HACHI) and missed 2 of 3 real honeypots. They
+    // are journaled as features so the learner can weigh them, not blindly obey.
+    if (j.is_renounced === false) res = { ok: false, reason: "GMGN: owner not renounced (can toggle transfers)", features };
+    else if (j.is_open_source === false) res = { ok: false, reason: "GMGN: contract source not verified", features };
     else if (j.sell_tax && Number(j.sell_tax) > 0.1) res = { ok: false, reason: `GMGN sell tax ${j.sell_tax}`, features };
     else res = { ok: true, reason: "gmgn pass", features };
   } catch (e) {
