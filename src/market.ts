@@ -79,3 +79,24 @@ export async function poolWethBalanceEth(pool: `0x${string}`): Promise<number> {
   const bal = await pub.readContract({ address: ADDR.WETH, abi: erc20Abi, functionName: "balanceOf", args: [pool] });
   return Number(formatEther(bal));
 }
+
+const FEE_TIERS = [10000, 3000, 500, 100] as const;
+
+/**
+ * Find the deepest canonical WETH pool for an arbitrary token (social/watchlist
+ * candidates arrive as token addresses, not pool-creation events). Picks the
+ * fee tier with the most WETH-side liquidity. null = no tradeable WETH pool.
+ */
+export async function findWethPool(token: `0x${string}`): Promise<PoolInfo | null> {
+  const found: { pool: `0x${string}`; weth: number }[] = [];
+  for (const fee of FEE_TIERS) {
+    try {
+      const pool = await pub.readContract({ address: ADDR.UNIV3_FACTORY, abi: factoryAbi, functionName: "getPool", args: [token, ADDR.WETH, fee] });
+      if (pool === "0x0000000000000000000000000000000000000000") continue;
+      found.push({ pool, weth: await poolWethBalanceEth(pool) });
+    } catch { /* tier absent */ }
+  }
+  if (!found.length) return null;
+  found.sort((a, b) => b.weth - a.weth);
+  return resolvePool(found[0].pool);
+}

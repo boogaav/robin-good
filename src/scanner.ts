@@ -19,7 +19,7 @@ type PoolTrack = {
 };
 
 export type Candidate = {
-  kind: "momentum" | "newListing";
+  kind: "momentum" | "newListing" | "social";
   info: PoolInfo;
   price: number;
   features: Record<string, number>; // journaled for the learning loop

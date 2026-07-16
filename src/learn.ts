@@ -72,7 +72,7 @@ export function reflect(): boolean {
   const before = JSON.stringify(params);
   const lessons: string[] = [];
 
-  for (const strategy of ["momentum", "newListing"] as const) {
+  for (const strategy of ["momentum", "newListing", "social"] as const) {
     const trades = all.filter((t) => t.strategy === strategy);
     if (trades.length < MIN_TRADES) continue;
     if (trades.length - (state.adaptedAtCount[strategy] ?? 0) < COOLDOWN) continue;
@@ -112,7 +112,7 @@ export function reflect(): boolean {
     }
 
     // Sizing by realized performance (still under HARD.MAX_TRADE_ETH).
-    const sizeKey = strategy === "momentum" ? "tradeSizeEth" : "newListingSizeEth";
+    const sizeKey = strategy === "momentum" ? "tradeSizeEth" : strategy === "social" ? "socialSizeEth" : "newListingSizeEth";
     if (s.netPnlEth < 0 && s.n >= 8) {
       lesson(lessons, `${header}: net negative — reducing size until the edge returns`, { key: sizeKey, ...nudge(params, sizeKey, 0.8) });
     } else if (s.netPnlEth > 0 && s.winRate >= 0.5 && s.n >= 8) {
@@ -178,7 +178,7 @@ if (process.argv.includes("--report")) {
   if (!all.length) {
     console.log("No trades journaled yet.");
   } else {
-    for (const strategy of ["momentum", "newListing"] as const) {
+    for (const strategy of ["momentum", "newListing", "social"] as const) {
       const trades = all.filter((t) => t.strategy === strategy);
       if (!trades.length) continue;
       const s = statsFor(trades.slice(-WINDOW));

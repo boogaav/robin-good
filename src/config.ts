@@ -80,4 +80,8 @@ export function liveModeExplanation(): string {
 export const POLL_MS = envNum("POLL_MS", 5000);
 /** Fast loop cadence: discovery, exits, entries. */
 export const FAST_POLL_MS = envNum("FAST_POLL_MS", 3000);
+
+/** Social-attention strategy (GMGN hot-search). Needs gmgn-cli configured. */
+export const SOCIAL_ENABLED = (process.env.SOCIAL_ENABLED ?? "1") === "1";
+export const SOCIAL_POLL_MS = envNum("SOCIAL_POLL_MS", 120_000);
 export const LOG_CHUNK_BLOCKS = 2000n;

@@ -124,7 +124,7 @@ export async function buildState() {
     params: loadParams(),
     daily: daily.load(utcDay()),
     scanner: scannerStats(),
-    radar: loadJson<{ ts: number; stats: unknown; radar: unknown[] }>("scanner.json", { ts: 0, stats: {}, radar: [] }),
+    radar: loadJson<{ ts: number; stats: unknown; radar: unknown[]; hot?: unknown[] }>("scanner.json", { ts: 0, stats: {}, radar: [], hot: [] }),
     wallet: await walletState(),
     positions: enriched,
     portfolio: buildPortfolio(trades, enriched),

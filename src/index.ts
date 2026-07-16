@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto";
 import { FAST_POLL_MS, HARD, LIVE, liveModeExplanation } from "./config.js";
 import { account } from "./chain.js";
 import { Scanner, type Candidate } from "./scanner.js";
+import { SocialScanner } from "./social.js";
+import { pollX, xEnabled } from "./social-x.js";
 import { loadParams } from "./params.js";
 import { buy, sell } from "./executor.js";
 import { canEnter, killSwitchOn, recordPnl, recordSpend } from "./risk.js";
@@ -9,12 +11,14 @@ import { checkSafety, liquidityCollapsed, addRug, screenCreator } from "./safety
 import { notify, notifierEnabled, proofLink } from "./notify.js";
 import { gmgnScreen } from "./gmgn.js";
 import { currentPrice } from "./market.js";
+import { SOCIAL_ENABLED, SOCIAL_POLL_MS } from "./config.js";
 import { archiveForeignModePositions, positions, saveJson, type Position } from "./state.js";
 import { journalTrade, toClosedTrade, type ClosedTrade } from "./journal.js";
 import { launchpadDistrusted, reflect, recordEventLesson } from "./learn.js";
 import { log, sleep } from "./util.js";
 
 const scanner = new Scanner();
+const social = new SocialScanner(SOCIAL_POLL_MS);
 const recentExits = new Map<string, number>(); // token -> ts, re-entry cooldown
 const REENTRY_COOLDOWN_MS = 10 * 60_000;
 const sellRevertCounts = new Map<string, number>(); // position id -> consecutive sell reverts
@@ -135,7 +139,7 @@ async function tryEnter(c: Candidate) {
     return;
   }
 
-  const sizeEth = c.kind === "momentum" ? p.tradeSizeEth : p.newListingSizeEth;
+  const sizeEth = c.kind === "momentum" ? p.tradeSizeEth : c.kind === "social" ? p.socialSizeEth : p.newListingSizeEth;
   const risk = await canEnter(sizeEth);
   if (!risk.allowed) {
     log("risk", `blocked ${c.info.symbol}: ${risk.reason}`);
@@ -163,6 +167,14 @@ async function tryEnter(c: Candidate) {
     return;
   }
 
+  // Social candidates carry no price (they come from GMGN, not the swap sweep) —
+  // read it live from the pool so the position has a real entry basis.
+  const entryPrice = c.price > 0 ? c.price : (await currentPrice(c.info).catch(() => 0));
+  if (entryPrice <= 0) {
+    log("safety", `rejected ${c.info.symbol} (${c.kind}): no readable price`);
+    return;
+  }
+
   try {
     const fill = await buy(c.info, sizeEth);
     const pos: Position = {
@@ -177,8 +189,8 @@ async function tryEnter(c: Candidate) {
       decimals: c.info.decimals,
       costEth: fill.ethAmount,
       tokenAmount: fill.tokenAmount.toString(),
-      entryPriceEthPerToken: c.price,
-      peakPriceEthPerToken: c.price,
+      entryPriceEthPerToken: entryPrice,
+      peakPriceEthPerToken: entryPrice,
       poolWethAtEntry: safety.poolWethEth ?? p.minPoolWethEth,
       launchpad: c.launchpad,
       entryTxHash: fill.txHash,
@@ -190,7 +202,7 @@ async function tryEnter(c: Candidate) {
     all.push(pos);
     positions.save(all);
     recordSpend(fill.ethAmount);
-    log("trade", `OPENED ${c.kind} ${c.info.symbol} size ${sizeEth} ETH @ ${c.price.toExponential(4)} ETH/token ${fill.simulated ? "(dry)" : fill.txHash}`);
+    log("trade", `OPENED ${c.kind} ${c.info.symbol} size ${sizeEth} ETH @ ${entryPrice.toExponential(4)} ETH/token ${fill.simulated ? "(dry)" : fill.txHash}`);
     notify(`🟢 <b>BUY ${c.info.symbol}</b> [${c.kind}] ${sizeEth} ETH ${proofLink(fill.txHash, "proof")}`);
   } catch (e) {
     log("trade", `buy failed ${c.info.symbol}: ${(e as Error).message.slice(0, 150)}`);
@@ -198,13 +210,15 @@ async function tryEnter(c: Candidate) {
 }
 
 async function fastTick() {
-  await Promise.all([scanner.pollDiscovery(), managePositions()]);
+  await Promise.all([scanner.pollDiscovery(), managePositions(), SOCIAL_ENABLED ? social.poll() : Promise.resolve()]);
   const p = loadParams();
-  saveJson("scanner.json", { ts: Date.now(), stats: scanner.stats(), radar: scanner.radar(p) });
+  saveJson("scanner.json", { ts: Date.now(), stats: scanner.stats(), radar: scanner.radar(p), hot: SOCIAL_ENABLED ? social.hotList() : [] });
   if (killSwitchOn()) return;
-  // New listings first (time-sensitive), then strongest momentum.
+  // New listings first (time-sensitive), then strongest momentum, then social attention.
   for (const c of scanner.newListingCandidates(p)) await tryEnter(c);
   for (const c of scanner.momentumCandidates(p).slice(0, 3)) await tryEnter(c);
+  if (SOCIAL_ENABLED) for (const c of await social.candidates(p)) await tryEnter(c);
+  if (xEnabled) for (const c of await pollX()) await tryEnter(c);
 }
 
 /** Heavy chain-wide swap sweep — own loop so it never blocks exits/snipes. */
@@ -223,6 +237,7 @@ async function main() {
   log("agent", `hood-agent starting — ${liveModeExplanation()}`);
   if (LIVE && account) log("agent", `wallet: ${account.address}`);
   log("agent", `telegram notifications: ${notifierEnabled ? "on" : "off (set TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID)"}`);
+  log("agent", `social attention: ${SOCIAL_ENABLED ? "on (GMGN hot-search)" : "off"}${xEnabled ? " + X watchlist" : ""}`);
   log("agent", `hard caps: ${JSON.stringify(HARD)}`);
   log("agent", `params: ${JSON.stringify(loadParams())}`);
   const parked = archiveForeignModePositions();

@@ -89,6 +89,10 @@
       <div id="chartwrap"><svg id="chart" width="100%" height="240" role="img" aria-label="Cumulative realized profit and loss in ETH across closed trades"></svg><div id="tooltip"></div></div>
     </div>
     <div class="card">
+      <h2>🔥 Social — GMGN hot-search <span class="dim" id="socialnote"></span></h2>
+      <div class="scroll"><table id="social"></table></div>
+    </div>
+    <div class="card">
       <h2>Radar — what the scanner sees <span id="radarage" class="stale"></span></h2>
       <div class="scroll"><table id="radar"></table></div>
     </div>
@@ -162,6 +166,17 @@ function tiles(s) {
   // sub is internally generated (dates, counts, pre-escaped links) — rendered as-is
   $("tiles").innerHTML = items.map(([k, v, sub, c]) =>
     `<div class="tile"><div class="k">${k}</div><div class="v ${c}">${v}</div><div class="s">${sub}</div></div>`).join("");
+}
+
+function socialTable(s) {
+  const hot = s.radar.hot ?? [];
+  if (!hot.length) { $("social").innerHTML = `<tr><td class="empty">social feed off or warming up</td></tr>`; $("socialnote").textContent = ""; return; }
+  $("socialnote").textContent = "tokens gaining search attention on Robinhood Chain";
+  const head = `<tr><th>Rank</th><th>Token</th><th class="num">1h change</th></tr>`;
+  $("social").innerHTML = head + hot.map((h, i) => `<tr>
+    <td class="dim">#${i + 1}</td>
+    <td class="sym">${esc(h.symbol)}</td>
+    <td class="num ${cls(h.change1hPct)}">${signed(h.change1hPct, 1, "%")}</td></tr>`).join("");
 }
 
 function radarTable(s) {
@@ -326,7 +341,7 @@ async function refresh() {
     const sc = s.scanner;
     const staleNote = staticMode ? ` · snapshot ${Math.max(0, Math.round((Date.now() - s.now) / 60000))}m ago` : ` · updated ${t(s.now)} UTC`;
     $("meta").textContent = `${sc.trackedPools ?? "?"} pools tracked · ${sc.pendingNew ?? "?"} fresh listings · block ${sc.block ?? "?"}${staleNote}`;
-    tiles(s); radarTable(s); positionsTable(s); portfolioTable(s); tradesTable(s); chart(s); logFeed(s); lessons(s);
+    tiles(s); socialTable(s); radarTable(s); positionsTable(s); portfolioTable(s); tradesTable(s); chart(s); logFeed(s); lessons(s);
     kv($("params"), s.params, (v) => typeof v === "number" ? +v.toFixed(4) : v);
     kv($("hard"), s.hard);
   } catch (e) {

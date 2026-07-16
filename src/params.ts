@@ -15,6 +15,9 @@ export type Params = {
   tradeSizeEth: number;
   // entries — new listings
   newListingSizeEth: number;
+  // entries — social attention (GMGN hot-search)
+  socialSizeEth: number;
+  socialMinChange1hPct: number;  // min 1h price gain for a hot-searched token to qualify
   maxListingAgeSec: number;      // only snipe pools younger than this
   minPoolWethEth: number;        // min WETH-side liquidity to touch a pool
   maxRoundTripLossPct: number;   // honeypot check: buy+sell quote loss tolerance
@@ -32,6 +35,8 @@ export const BOUNDS: Record<keyof Params, [number, number]> = {
   volumeMultiple: [1.5, 8],
   tradeSizeEth: [0.001, HARD.MAX_TRADE_ETH],
   newListingSizeEth: [0.001, HARD.MAX_TRADE_ETH],
+  socialSizeEth: [0.001, HARD.MAX_TRADE_ETH],
+  socialMinChange1hPct: [5, 100],
   maxListingAgeSec: [60, 1800],
   minPoolWethEth: [0.5, 20],
   maxRoundTripLossPct: [1, 10],
@@ -48,6 +53,8 @@ export const DEFAULTS: Params = {
   volumeMultiple: 3,
   tradeSizeEth: Math.min(0.01, HARD.MAX_TRADE_ETH),
   newListingSizeEth: Math.min(0.005, HARD.MAX_TRADE_ETH),
+  socialSizeEth: Math.min(0.005, HARD.MAX_TRADE_ETH),
+  socialMinChange1hPct: 15,
   maxListingAgeSec: 600,
   minPoolWethEth: 2,
   maxRoundTripLossPct: 6,
