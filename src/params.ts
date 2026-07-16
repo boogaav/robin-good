@@ -18,6 +18,9 @@ export type Params = {
   // entries — social attention (GMGN hot-search)
   socialSizeEth: number;
   socialMinChange1hPct: number;  // min 1h price gain for a hot-searched token to qualify
+  // entries — NOXA launchpad + copy-trade
+  noxaSizeEth: number;
+  copytradeSizeEth: number;
   maxListingAgeSec: number;      // only snipe pools younger than this
   minPoolWethEth: number;        // min WETH-side liquidity to touch a pool
   maxRoundTripLossPct: number;   // honeypot check: buy+sell quote loss tolerance
@@ -37,6 +40,8 @@ export const BOUNDS: Record<keyof Params, [number, number]> = {
   newListingSizeEth: [0.001, HARD.MAX_TRADE_ETH],
   socialSizeEth: [0.001, HARD.MAX_TRADE_ETH],
   socialMinChange1hPct: [5, 100],
+  noxaSizeEth: [0.001, HARD.MAX_TRADE_ETH],
+  copytradeSizeEth: [0.001, HARD.MAX_TRADE_ETH],
   maxListingAgeSec: [60, 1800],
   minPoolWethEth: [0.5, 20],
   maxRoundTripLossPct: [1, 10],
@@ -55,6 +60,8 @@ export const DEFAULTS: Params = {
   newListingSizeEth: Math.min(0.005, HARD.MAX_TRADE_ETH),
   socialSizeEth: Math.min(0.005, HARD.MAX_TRADE_ETH),
   socialMinChange1hPct: 15,
+  noxaSizeEth: Math.min(0.005, HARD.MAX_TRADE_ETH),
+  copytradeSizeEth: Math.min(0.005, HARD.MAX_TRADE_ETH),
   maxListingAgeSec: 600,
   minPoolWethEth: 2,
   maxRoundTripLossPct: 6,

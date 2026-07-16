@@ -43,6 +43,14 @@ Every ~5s tick:
 **The learner can never raise risk beyond your `.env` hard caps** — bounds in
 `src/params.ts` are clamped to them.
 
+## Strategies
+
+Robin Good runs five entry strategies concurrently, each scored separately by the
+learning loop: **momentum** (breakout + volume), **new-listing** (fresh pools),
+**social** (GMGN hot-search attention), **noxa** (new NOXA-launchpad tokens), and
+**copy-trade** (mirror buys from wallets in `COPY_WALLETS`). Every entry — no
+matter the strategy — passes the same safety gate.
+
 ## Quickstart
 
 ```bash

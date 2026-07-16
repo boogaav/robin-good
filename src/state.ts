@@ -45,7 +45,7 @@ function replacer(_k: string, v: unknown) {
 export type Position = {
   id: string;
   live?: boolean;            // opened by a live agent; absent/false = paper
-  strategy: "momentum" | "newListing" | "social";
+  strategy: "momentum" | "newListing" | "social" | "noxa" | "copytrade";
   token: `0x${string}`;
   symbol: string;
   pool: `0x${string}`;

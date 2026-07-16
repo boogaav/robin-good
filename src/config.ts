@@ -84,4 +84,12 @@ export const FAST_POLL_MS = envNum("FAST_POLL_MS", 3000);
 /** Social-attention strategy (GMGN hot-search). Needs gmgn-cli configured. */
 export const SOCIAL_ENABLED = (process.env.SOCIAL_ENABLED ?? "1") === "1";
 export const SOCIAL_POLL_MS = envNum("SOCIAL_POLL_MS", 120_000);
+
+/** NOXA launchpad strategy (GMGN trenches, launchpad=noxa). */
+export const NOXA_ENABLED = (process.env.NOXA_ENABLED ?? "1") === "1";
+export const NOXA_POLL_MS = envNum("NOXA_POLL_MS", 60_000);
+
+/** Copy-trade: comma-separated wallet addresses to mirror buys from. Off if empty. */
+export const COPY_WALLETS = (process.env.COPY_WALLETS ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+export const COPY_POLL_MS = envNum("COPY_POLL_MS", 30_000);
 export const LOG_CHUNK_BLOCKS = 2000n;

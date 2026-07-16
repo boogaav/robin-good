@@ -2,7 +2,7 @@ import { appendJsonl, readJsonl, type Position } from "./state.js";
 
 export type ClosedTrade = {
   id: string;
-  strategy: "momentum" | "newListing" | "social";
+  strategy: "momentum" | "newListing" | "social" | "noxa" | "copytrade";
   token: string;
   symbol: string;
   pool: string;

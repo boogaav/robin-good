@@ -4,6 +4,8 @@ import { account } from "./chain.js";
 import { Scanner, type Candidate } from "./scanner.js";
 import { SocialScanner } from "./social.js";
 import { pollX, xEnabled } from "./social-x.js";
+import { NoxaScanner } from "./noxa.js";
+import { CopyTrader } from "./copytrade.js";
 import { loadParams } from "./params.js";
 import { buy, sell, HoneypotBuyError } from "./executor.js";
 import { canEnter, killSwitchOn, recordPnl, recordSpend } from "./risk.js";
@@ -11,7 +13,7 @@ import { checkSafety, liquidityCollapsed, addRug, screenCreator } from "./safety
 import { notify, notifierEnabled, proofLink } from "./notify.js";
 import { gmgnScreen } from "./gmgn.js";
 import { currentPrice } from "./market.js";
-import { SOCIAL_ENABLED, SOCIAL_POLL_MS, EXPLORER } from "./config.js";
+import { SOCIAL_ENABLED, SOCIAL_POLL_MS, EXPLORER, NOXA_ENABLED, NOXA_POLL_MS, COPY_WALLETS, COPY_POLL_MS } from "./config.js";
 import { archiveForeignModePositions, positions, saveJson, type Position } from "./state.js";
 import { journalTrade, toClosedTrade, type ClosedTrade } from "./journal.js";
 import { launchpadDistrusted, reflect, recordEventLesson } from "./learn.js";
@@ -19,6 +21,8 @@ import { log, sleep } from "./util.js";
 
 const scanner = new Scanner();
 const social = new SocialScanner(SOCIAL_POLL_MS);
+const noxa = new NoxaScanner(NOXA_POLL_MS);
+const copy = new CopyTrader(COPY_WALLETS, COPY_POLL_MS);
 const recentExits = new Map<string, number>(); // token -> ts, re-entry cooldown
 const REENTRY_COOLDOWN_MS = 10 * 60_000;
 const sellRevertCounts = new Map<string, number>(); // position id -> consecutive sell reverts
@@ -139,7 +143,12 @@ async function tryEnter(c: Candidate) {
     return;
   }
 
-  const sizeEth = c.kind === "momentum" ? p.tradeSizeEth : c.kind === "social" ? p.socialSizeEth : p.newListingSizeEth;
+  const sizeEth =
+    c.kind === "momentum" ? p.tradeSizeEth :
+    c.kind === "social" ? p.socialSizeEth :
+    c.kind === "noxa" ? p.noxaSizeEth :
+    c.kind === "copytrade" ? p.copytradeSizeEth :
+    p.newListingSizeEth;
   const risk = await canEnter(sizeEth);
   if (!risk.allowed) {
     log("risk", `blocked ${c.info.symbol}: ${risk.reason}`);
@@ -237,6 +246,8 @@ async function fastTick() {
   for (const c of scanner.momentumCandidates(p).slice(0, 3)) await tryEnter(c);
   if (SOCIAL_ENABLED) for (const c of await social.candidates(p)) await tryEnter(c);
   if (xEnabled) for (const c of await pollX()) await tryEnter(c);
+  if (NOXA_ENABLED) for (const c of await noxa.candidates(p)) await tryEnter(c);
+  if (copy.enabled) for (const c of await copy.candidates()) await tryEnter(c);
 }
 
 /** Heavy chain-wide swap sweep — own loop so it never blocks exits/snipes. */
@@ -256,6 +267,7 @@ async function main() {
   if (LIVE && account) log("agent", `wallet: ${account.address}`);
   log("agent", `telegram notifications: ${notifierEnabled ? "on" : "off (set TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID)"}`);
   log("agent", `social attention: ${SOCIAL_ENABLED ? "on (GMGN hot-search)" : "off"}${xEnabled ? " + X watchlist" : ""}`);
+  log("agent", `NOXA launchpad: ${NOXA_ENABLED ? "on" : "off"} | copy-trade: ${copy.enabled ? `${COPY_WALLETS.length} wallet(s)` : "off"}`);
   log("agent", `hard caps: ${JSON.stringify(HARD)}`);
   log("agent", `params: ${JSON.stringify(loadParams())}`);
   const parked = archiveForeignModePositions();
