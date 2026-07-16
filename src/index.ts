@@ -5,13 +5,13 @@ import { Scanner, type Candidate } from "./scanner.js";
 import { SocialScanner } from "./social.js";
 import { pollX, xEnabled } from "./social-x.js";
 import { loadParams } from "./params.js";
-import { buy, sell } from "./executor.js";
+import { buy, sell, HoneypotBuyError } from "./executor.js";
 import { canEnter, killSwitchOn, recordPnl, recordSpend } from "./risk.js";
 import { checkSafety, liquidityCollapsed, addRug, screenCreator } from "./safety.js";
 import { notify, notifierEnabled, proofLink } from "./notify.js";
 import { gmgnScreen } from "./gmgn.js";
 import { currentPrice } from "./market.js";
-import { SOCIAL_ENABLED, SOCIAL_POLL_MS } from "./config.js";
+import { SOCIAL_ENABLED, SOCIAL_POLL_MS, EXPLORER } from "./config.js";
 import { archiveForeignModePositions, positions, saveJson, type Position } from "./state.js";
 import { journalTrade, toClosedTrade, type ClosedTrade } from "./journal.js";
 import { launchpadDistrusted, reflect, recordEventLesson } from "./learn.js";
@@ -205,6 +205,24 @@ async function tryEnter(c: Candidate) {
     log("trade", `OPENED ${c.kind} ${c.info.symbol} size ${sizeEth} ETH @ ${entryPrice.toExponential(4)} ETH/token ${fill.simulated ? "(dry)" : fill.txHash}`);
     notify(`🟢 <b>BUY ${c.info.symbol}</b> [${c.kind}] ${sizeEth} ETH ${proofLink(fill.txHash, "proof")}`);
   } catch (e) {
+    if (e instanceof HoneypotBuyError) {
+      // ETH was spent but the token delivered ~nothing (transfer-tax honeypot).
+      // Book the full loss, blacklist, and open NO position — there's nothing to manage.
+      recordSpend(e.ethSpent);
+      recordPnl(-e.ethSpent);
+      const trade = toClosedTrade(
+        { id: randomUUID(), live: LIVE, strategy: c.kind, token: c.info.token, symbol: c.info.symbol, pool: c.info.pool, fee: c.info.fee, tokenIsToken0: c.info.tokenIsToken0, decimals: c.info.decimals, costEth: e.ethSpent, tokenAmount: e.got.toString(), entryPriceEthPerToken: entryPrice, peakPriceEthPerToken: entryPrice, poolWethAtEntry: 0, launchpad: c.launchpad, entryTxHash: e.txHash, openedAt: Date.now(), entrySignal: c.features, paramsAtEntry: { ...p } },
+        0, "rug", !LIVE, e.txHash,
+      );
+      journalTrade(trade);
+      recentExits.set(c.info.token.toLowerCase(), Date.now());
+      await addRug(c.info.token, "buy delivered ~0 tokens — transfer-tax honeypot");
+      recordEventLesson(`Transfer-tax honeypot: ${c.info.symbol} (${c.info.token}) passed the round-trip quote but the buy delivered ~0 tokens (router slippage checks pool output, not our balance). Lost ${e.ethSpent} ETH. Now caught at buy time via balance-delta floor; creator blacklisted.`);
+      log("trade", `HONEYPOT BUY ${c.info.symbol}: delivered ${e.got} tokens — booked -${e.ethSpent} ETH, blacklisted | proof: ${EXPLORER}/tx/${e.txHash}`);
+      notify(`☠️ <b>HONEYPOT ${c.info.symbol}</b> — buy delivered ~0 tokens, -${e.ethSpent} ETH. Creator blacklisted. ${proofLink(e.txHash, "proof")}`);
+      reflect();
+      return;
+    }
     log("trade", `buy failed ${c.info.symbol}: ${(e as Error).message.slice(0, 150)}`);
   }
 }

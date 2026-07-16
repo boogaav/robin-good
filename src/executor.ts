@@ -20,10 +20,22 @@ async function quote(tokenIn: `0x${string}`, tokenOut: `0x${string}`, fee: numbe
   return result[0];
 }
 
+/** Thrown when a buy spends ETH but the token delivers ~nothing (transfer-tax honeypot). */
+export class HoneypotBuyError extends Error {
+  constructor(readonly txHash: string, readonly ethSpent: number, readonly got: bigint) {
+    super(`buy received ${got} tokens — transfer-tax honeypot (${txHash})`);
+    this.name = "HoneypotBuyError";
+  }
+}
+
+/** Received-vs-quoted floor: below this fraction of the quote, the token is taxing us out. */
+const MIN_FILL_FRACTION = 0.5;
+
 /** Buy `sizeEth` of token with native ETH (router wraps). */
 export async function buy(info: PoolInfo, sizeEth: number): Promise<Fill> {
   const amountIn = parseEther(sizeEth.toString());
   const quoted = await quote(ADDR.WETH, info.token, info.fee, amountIn);
+  if (quoted === 0n) throw new Error(`buy quote returned 0 — no market for ${info.symbol}`);
   const minOut = (quoted * BigInt(Math.floor((100 - HARD.MAX_SLIPPAGE_PCT) * 100))) / 10000n;
 
   if (!LIVE || !wallet || !account) {
@@ -45,6 +57,11 @@ export async function buy(info: PoolInfo, sizeEth: number): Promise<Fill> {
   const after = await pub.readContract({ address: info.token, abi: erc20Abi, functionName: "balanceOf", args: [account.address] });
   const got = after - before;
   log("exec", `LIVE BUY ${info.symbol}: ${sizeEth} ETH -> ${got} raw | proof: ${EXPLORER}/tx/${hash}`);
+  // The router's slippage check is on the POOL output; a transfer-tax token can
+  // pass it yet deliver ~nothing to us. balanceOf delta is the real fill — if it
+  // is far below the quote, the ETH is gone to a honeypot, not a position.
+  const floor = (minOut * BigInt(Math.round(MIN_FILL_FRACTION * 100))) / 100n;
+  if (got === 0n || got < floor) throw new HoneypotBuyError(hash, sizeEth, got);
   return { ethAmount: sizeEth, tokenAmount: got, txHash: hash, simulated: false };
 }
 
